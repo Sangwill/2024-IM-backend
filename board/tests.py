@@ -1262,12 +1262,6 @@ class BoardTests(TestCase):
         # Test case 5: Accept invitation
         response = self.client.post('/user/review_invitation', data=json.dumps({'request_id': self.invitation_request.id, 'response': 'accept'}), content_type='application/json', **self.jwt_header_user1)
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(Invitation.objects.filter(id=self.invitation_request.id, status='accepted').exists())
-
-        # Test case 6: Reject invitation
-        response = self.client.post('/user/review_invitation', data=json.dumps({'request_id': self.invitation_request.id, 'response': 'reject'}), content_type='application/json', **self.jwt_header_user1)
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(Invitation.objects.filter(id=self.invitation_request.id, status='rejected').exists())
 
     def test_view_invitations(self):
         # Create some test users

@@ -3,8 +3,6 @@ uwsgi  # Please uncomment this line when you try to deploy the project onto SECo
 # Generally, when you get sudo permission in Unix systems, `pip install uwsgi` works, otherwise `conda install uwsgi` is recommended.
 
 django-cors-headers==4.3.1
-# pymysql
-# mysqlclient==2.1.0
 
 pytest
 pytest-django
@@ -12,3 +10,6 @@ coverage
 
 channels==4.0.0
 daphne==4.1.0
+
+pymysql==1.0.2
+mysqlclient==2.1.0

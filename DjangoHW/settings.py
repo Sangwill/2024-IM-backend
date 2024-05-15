@@ -84,11 +84,22 @@ ASGI_APPLICATION = 'DjangoHW.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR /'data'/ 'db.sqlite3',
+#     }  # Change to MySQL or other databases for your FINAL project
+# }
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR /'data'/ 'db.sqlite3',
-    }  # Change to MySQL or other databases for your FINAL project
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'board',  # 数据库名称
+        'USER': 'root',  # 数据库用户名
+        'PASSWORD': 'uu0Co8os5aa5iMoh2aYohWez9epi4ha0',  # 数据库密码
+        'HOST': 'mysql.Dream.secoder.local',  # 数据库主机地址
+        'PORT': '3306',  # 数据库端口号，默认是 3306
+    }
 }
 
 
