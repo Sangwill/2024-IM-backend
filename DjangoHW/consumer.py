@@ -57,3 +57,32 @@ class IMConsumer(AsyncWebsocketConsumer):
             'unread_count': unread_count,
             'last_read_map': last_read_map,
         }))
+
+
+    async def new(self, event) -> None:
+        conversation_id = event['conversation_id']
+        member_id = event['member_id']
+        member_name = event['member_name']
+        member_avatar = event['member_avatar']
+        last_read_map = event['last_read_map']
+
+        await self.send(text_data=json.dumps({
+            'type': 'new',
+            'conversation_id': conversation_id,
+            'member_id': member_id,
+            'member_name': member_name,
+            'member_avatar': member_avatar,
+            'last_read_map': last_read_map,
+        }))
+
+    async def quit(self, event) -> None:
+        conversation_id = event['conversation_id']
+        last_read_map = event['last_read_map']
+        member_id = event['member_id']
+
+        await self.send(text_data=json.dumps({
+            'type': 'quit',
+            'member_id': member_id,
+            'conversation_id': conversation_id,
+            'last_read_map': last_read_map,
+        }))

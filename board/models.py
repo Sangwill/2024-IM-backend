@@ -56,6 +56,7 @@ class Conversation(models.Model):
     # 基本信息
     id = models.BigAutoField(primary_key=True)
     members = models.ManyToManyField(CustomUser, related_name='conversations')
+    history_members = models.ManyToManyField(CustomUser, related_name='history_conversations')
     name = models.CharField(max_length=20, null=True, blank=True)
     avatar_base64 = models.TextField(null=True)
     # 时间信息

@@ -97,8 +97,12 @@ DATABASES = {
         'NAME': 'board',  # 数据库名称
         'USER': 'root',  # 数据库用户名
         'PASSWORD': 'uu0Co8os5aa5iMoh2aYohWez9epi4ha0',  # 数据库密码
-        'HOST': 'mysql.Dream.secoder.local',  # 数据库主机地址
+        'HOST': 'mysql.Dream.secoder.local',  # 数据库主机地址，本地数据库填写 'localhost'，secoder 数据库填写 'mysql.Dream.secoder.local'
         'PORT': '3306',  # 数据库端口号，默认是 3306
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
     }
 }
 

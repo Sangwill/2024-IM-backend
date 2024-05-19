@@ -13,6 +13,15 @@ from utils.utils_require import  CheckRequire,  check_for_user_register_data, re
 from utils.utils_jwt import generate_jwt_token, check_jwt_token
 import hashlib
 
+# 常量
+
+MAX_FRIEND_GROUP_NAME_LENGTH = 20  # 最大好友分组名长度
+MAX_MESSAGE_LENGTH = 1500  # 最大消息长度
+MAX_ANNOUNCEMENT_LENGTH = 1000  # 最大群公告长度
+MAX_GROUP_NAME_LENGTH = 20  # 最大群聊名长度
+
+# 错误返回
+
 # 通用
 USER_NOT_LOGGED_IN = request_failed(1, "User not logged in", 401)
 USER_DOES_NOT_EXIST = request_failed(2, "User does not exist", 404)
@@ -41,6 +50,8 @@ CONVERSATION_NOT_FOUND = request_failed(30, "Conversation not found", 404)
 MEMBER_NOT_FOUND = request_failed(31, "Member not found", 404)
 MESSAGE_NOT_FOUND = request_failed(32, "Message not found", 404)
 USER_NOT_IN_CONVERSATION = request_failed(33, "User not in conversation", 403)
+INVALID_MESSAGE = request_failed(34, "Invalid message", 400)
+INVALID_GROUP_NAME = request_failed(35, "Invalid group name", 400)
 
 # 群聊
 GROUP_NOT_FOUND = request_failed(40, "Group not found", 404)
@@ -60,6 +71,24 @@ INVITATION_NOT_FOUND = request_failed(51, "Invitation not found", 404)
 
 # 群公告
 INVALID_ANNOUNCEMENT_CONTENT = request_failed(60, "Invalid announcement content", 400)
+
+# 用户管理部分
+
+@require_http_methods(["GET"])
+def get_user_info(request: HttpRequest, id: int):
+    jwt_token = request.headers.get("Authorization")
+    user_data = check_jwt_token(jwt_token)
+    if user_data is None:
+        return USER_NOT_LOGGED_IN
+    try:
+        user = CustomUser.objects.get(id=id)
+    except CustomUser.DoesNotExist:
+        return USER_DOES_NOT_EXIST
+    return request_success({
+        "user_id": user.id,
+        "username": user.username,
+        "avatar_base64": user.avatar_base64
+    })
 
 @CheckRequire
 @require_http_methods(["POST"])
@@ -102,7 +131,24 @@ def logoff(req: HttpRequest):
     password = require(body, "password", "string", err_msg="Missing or error type of [password]")
     user= CustomUser.objects.get(username=user_name_jwt["username"])
     if user.password == hashlib.md5(password.encode()).hexdigest():
-        CustomUser.objects.filter(username=user).delete()
+        # 获取用户是群主的所有群聊
+        owned_groups = Conversation.objects.filter(owner=user)
+        for group in owned_groups:
+            # 获取群聊中的管理员和普通成员，按ID排序
+            admins = group.admin.all().order_by('id')
+            members = group.members.exclude(id=user.id).order_by('id')
+
+            # 尝试将群主转让给管理员，如果没有管理员则转让给普通成员
+            if admins.exists():
+                new_owner = admins.first()
+                group.owner = new_owner
+            elif members.exists():
+                new_owner = members.first()
+                group.owner = new_owner
+            group.save()
+        
+        # 删除用户
+        user.delete()
         return request_success()
     else:
         return INCORRECT_PASSWORD
@@ -398,7 +444,7 @@ def add_friend_to_friend_group(req: HttpRequest):
         return USER_NOT_LOGGED_IN
     body = json.loads(req.body.decode("utf-8"))
     friend_group_name = require(body, "friend_group_name", "string", err_msg="Missing or error type of [group_id]")
-    if not len(friend_group_name)<=20:
+    if len(friend_group_name) == 0 or len(friend_group_name) > MAX_FRIEND_GROUP_NAME_LENGTH:
         return INVALID_FRIEND_GROUP_NAME
     friend_id = require(body, "friend_id", "int", err_msg="Missing or error type of [friend_id]")
     user = CustomUser.objects.get(username=user_name_jwt["username"])
@@ -421,7 +467,7 @@ def add_friend_to_friend_group(req: HttpRequest):
     return request_success()
 
 
-# 会话基本功能
+# 会话通用部分
 
 @require_http_methods(["GET"])
 def get_private_conversations(request: HttpRequest) -> HttpResponse:
@@ -454,71 +500,6 @@ def get_private_conversations(request: HttpRequest) -> HttpResponse:
                 break  # 只取第一个不是当前用户的成员
     
     return request_success({"conversations": result_conversations})
-
-
-
-@require_http_methods(["POST"])
-def create_private_conversation(request: HttpRequest) -> HttpResponse:
-    # 验证用户是否登录
-    # jwt_token = request.headers.get("Authorization")
-    # user_data = check_jwt_token(jwt_token)
-    # if user_data is None:
-    #     return USER_NOT_LOGGED_IN
-    
-    # # 分析请求体
-    # try:
-    #     body = json.loads(request.body)
-    #     friend_id = int(body.get('friend_id'))
-    # except (json.JSONDecodeError, ValueError, TypeError):
-    #     return INVALID_REQUEST
-    
-    # # 验证 friend_id 的合法性
-    # try:
-    #     requester = CustomUser.objects.get(username=user_data["username"])
-    #     friend = CustomUser.objects.get(pk=friend_id)
-    # except CustomUser.DoesNotExist:
-    #     return FRIEND_NOT_FOUND
-    
-    # if not Friendship.objects.filter(user=requester, friend=friend).exists():
-    #     return NOT_FRIENDS
-    
-    # # 检查是否已存在私人聊天
-    # existing_conversations = Conversation.objects.filter(members__in=[requester, friend], type='private_chat').prefetch_related('members').distinct()
-    # for conv in existing_conversations:
-    #     if conv.members.count() == 2 and set(conv.members.all()) == {requester, friend}:
-    #         # 找到了一个已存在的私人聊天，直接返回
-    #             return request_success({
-    #                 "conversation_id": conv.id,
-    #                 "friend_id": friend_id,
-    #                 "friend_name": friend.username,
-    #                 "friend_avatar": friend.avatar_base64
-    #             })
-        
-    # conversation = Conversation.objects.create(type='private_chat')
-    # conversation.members.set([requester, friend])
-    # status, created = UserConversationStatus.objects.update_or_create(
-    #     user=requester,
-    #     conversation=conversation,
-    #     defaults={
-    #         'last_read_at': datetime.now(timezone(timedelta(hours=8))),
-    #         'last_read_message_id': 0
-    #     },
-    # )
-    # status, created = UserConversationStatus.objects.update_or_create(
-    #     user=friend,
-    #     conversation=conversation,
-    #     defaults={
-    #         'last_read_at': datetime.now(timezone(timedelta(hours=8))),
-    #         'last_read_message_id': 0
-    #     },
-    # )
-    return request_success({
-        # "conversation_id": conversation.id, 
-        # "friend_id": friend_id,
-        # "friend_name": friend.username,
-        # "friend_avatar": friend.avatar_base64
-        })
-
 
 @require_http_methods(["GET"])
 def conversation(request: HttpRequest, conversation_id: int) -> HttpResponse:
@@ -609,32 +590,40 @@ def conversation(request: HttpRequest, conversation_id: int) -> HttpResponse:
     messages = messages_query.select_related('sender').prefetch_related('receivers')
 
     return request_success({
-"members": [
-    {
-        "member_id": member.id,
-        "member_name": member.username,
-        "member_avatar": member.avatar_base64,
-    }
-    for member in conversation.members.all()
-],
-"last_read_map": last_read_map,
-"messages": [
-    {
-        "conversation_id": conversation.id,
-        "msg_id": msg.id,
-        "content": msg.content,
-        "sender_id": msg.sender.id,
-        "create_time": msg.timestamp.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
-        "reply_count": msg.reply_count,
-        "reply_to": {
-            "msg_id": msg.reply_to.id,
-            "content": msg.reply_to.content,
-            "sender_id": msg.reply_to.sender.id,
-            "create_time": msg.reply_to.timestamp.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
-        } if msg.reply_to else None
-    }
-    for msg in messages
-]
+        "members": [
+            {
+                "member_id": member.id,
+                "member_name": member.username,
+                "member_avatar": member.avatar_base64,
+            }
+            for member in conversation.members.all()
+        ],
+        "history_members": [
+            {
+                "member_id": member.id,
+                "member_name": member.username,
+                "member_avatar": member.avatar_base64,
+            }
+            for member in conversation.history_members.all()
+        ],
+        "last_read_map": last_read_map,
+        "messages": [
+            {
+                "conversation_id": conversation.id,
+                "msg_id": msg.id,
+                "content": msg.content,
+                "sender_id": msg.sender.id,
+                "create_time": msg.timestamp.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
+                "reply_count": msg.reply_count,
+                "reply_to": {
+                    "msg_id": msg.reply_to.id,
+                    "content": msg.reply_to.content,
+                    "sender_id": msg.reply_to.sender.id,
+                    "create_time": msg.reply_to.timestamp.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
+                } if msg.reply_to else None
+            }
+            for msg in messages
+        ]
     })
 
 @require_http_methods(["POST"])
@@ -652,6 +641,9 @@ def send_message(request: HttpRequest) -> HttpResponse:
         content = body.get("content", "").strip()
     except (ValueError, TypeError, AttributeError):
         return INVALID_REQUEST
+    
+    if len(content) > MAX_MESSAGE_LENGTH:
+        return INVALID_MESSAGE
 
     # 验证 conversation_id 和 content 的合法性
     try:
@@ -716,7 +708,7 @@ def send_message(request: HttpRequest) -> HttpResponse:
                 'conversation_id': conversation_id,
                 'sender_id': sender.id,
                 "sender_name": sender.username,
-                "sender_avatar": sender.avatar_base64,
+                "sender_avatar": None,
                 'message_id': message.id,
                 'content': content,
                 'timestamp': message.timestamp.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
@@ -817,42 +809,6 @@ def records(request: HttpRequest, conversation_id: int) -> HttpResponse:
     ]})
 
 @require_http_methods(["POST"])
-def mark_as_read(request: HttpRequest, conversation_id: int) -> HttpResponse:
-    # jwt_token = request.headers.get("Authorization")
-    # user_data = check_jwt_token(jwt_token)
-    # if user_data is None:
-    #     return USER_NOT_LOGGED_IN
-    
-    # try:
-    #     user = CustomUser.objects.get(username=user_data["username"])
-    #     conversation = Conversation.objects.get(id=conversation_id)
-    # except (CustomUser.DoesNotExist, Conversation.DoesNotExist):
-    #     return CONVERSATION_NOT_FOUND
-    
-    # if not conversation.members.filter(pk=user.pk).exists():
-    #     return USER_NOT_IN_CONVERSATION
-    
-    # if Message.objects.filter(conversation=conversation):
-    #     last_read_message_id = Message.objects.filter(conversation=conversation).last().id
-    # else:
-    #     last_read_message_id = 0
-
-    # status, created = UserConversationStatus.objects.update_or_create(
-    #     user=user,
-    #     conversation=conversation,
-    #     defaults={
-    #         'last_read_at': datetime.now(timezone(timedelta(hours=8))),
-    #         'last_read_message_id': last_read_message_id
-    #     },
-    # )
-    
-    # messages = Message.objects.filter(conversation=conversation)
-    # for msg in messages:
-    #     msg.read_by.add(user)
-    
-    return request_success()
-
-@require_http_methods(["POST"])
 def delete_records(request: HttpRequest, conversation_id: int) -> HttpResponse:
     jwt_token = request.headers.get("Authorization")
     user_data = check_jwt_token(jwt_token)
@@ -889,6 +845,9 @@ def reply_message(request: HttpRequest) -> HttpResponse:
     except (ValueError, TypeError, AttributeError, json.JSONDecodeError):
         return INVALID_REQUEST
 
+    if len(content) > MAX_MESSAGE_LENGTH:
+        return INVALID_MESSAGE
+    
     try:
         sender = CustomUser.objects.get(username=user_data["username"])
         conversation = Conversation.objects.get(id=conversation_id)
@@ -941,7 +900,7 @@ def reply_message(request: HttpRequest) -> HttpResponse:
                 'conversation_id': conversation_id,
                 'sender_id': sender.id,
                 "sender_name": sender.username,
-                "sender_avatar": sender.avatar_base64,
+                "sender_avatar": None,
                 'message_id': message.id,
                 'content': message.content,
                 'timestamp': message.timestamp.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
@@ -952,13 +911,15 @@ def reply_message(request: HttpRequest) -> HttpResponse:
                     "content": message.reply_to.content,
                     "sender_id": message.reply_to.sender.id,
                     "sender_name": message.reply_to.sender.username,
-                    "sender_avatar": message.reply_to.sender.avatar_base64,
+                    "sender_avatar": None,
                     "timestamp": message.reply_to.timestamp.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S"),
                 }
             }
         )
 
     return request_success({"message_id": message.id})
+
+# 会话群聊部分
 
 @require_http_methods(["POST"])
 def create_group_conversation(request: HttpRequest) -> JsonResponse:
@@ -980,6 +941,9 @@ def create_group_conversation(request: HttpRequest) -> JsonResponse:
     except (json.JSONDecodeError, ValueError):
         return INVALID_REQUEST
 
+    if len(name) == 0 or len(name) > MAX_GROUP_NAME_LENGTH:
+        return INVALID_GROUP_NAME
+    
     # 验证发起请求的用户是否存在，并确保群主包含在成员列表中
     try:
         owner = CustomUser.objects.get(username=user_data['username'])
@@ -1249,6 +1213,31 @@ def remove_member(request: HttpRequest) -> HttpResponse:
 
     # 移除成员
     group.members.remove(member)
+    group.history_members.add(member)
+
+    last_read_map = {}
+    for member in group.members.all():
+        # 查询每个成员在当前会话中的状态
+        status = UserConversationStatus.objects.filter(
+            user=member,
+            conversation=group
+        ).first()  # 使用 first() 是因为 unique_together 确保了每对会有唯一的记录
+        
+        # 将成员 ID 与 最后阅读消息 ID 存入字典
+        last_read_map[member.id] = status.last_read_message_id if status else None
+
+    channel_layer = get_channel_layer()
+    for member in group.members.all():
+        async_to_sync(channel_layer.group_send)(
+            member.username, 
+            {
+                'type': 'quit',
+                'member_id': member_id,
+                'conversation_id': group_id,
+                'last_read_map': last_read_map,
+            }
+        )
+    
     return request_success({"message": "Member removed successfully"})
 
 @require_http_methods(["POST"])
@@ -1301,6 +1290,31 @@ def invite_member(request: HttpRequest) -> HttpResponse:
                             'last_read_message_id': 0
                         },
                     )
+
+                    last_read_map = {}
+                    for member in group.members.all():
+                        # 查询每个成员在当前会话中的状态
+                        status = UserConversationStatus.objects.filter(
+                            user=member,
+                            conversation=group
+                        ).first()  # 使用 first() 是因为 unique_together 确保了每对会有唯一的记录
+                        
+                        # 将成员 ID 与 最后阅读消息 ID 存入字典
+                        last_read_map[member.id] = status.last_read_message_id if status else None
+
+                    channel_layer = get_channel_layer()
+                    for member in group.members.all():
+                        async_to_sync(channel_layer.group_send)(
+                            member.username, 
+                            {
+                                'type': 'new',
+                                'conversation_id': group_id,
+                                'member_id': invitee_id,
+                                'member_name': invitee.username,
+                                'member_avatar': invitee.avatar_base64,
+                                'last_read_map': last_read_map,
+                            }
+                        )
             except CustomUser.DoesNotExist:
                 continue  # 如果用户不存在，继续处理下一个ID
         return request_success({
@@ -1373,6 +1387,31 @@ def review_invitation(request: HttpRequest) -> HttpResponse:
                 'last_read_message_id': 0
             },
         )
+
+        last_read_map = {}
+        for member in join_request.group.members.all():
+            # 查询每个成员在当前会话中的状态
+            status = UserConversationStatus.objects.filter(
+                user=member,
+                conversation=join_request.group
+            ).first()  # 使用 first() 是因为 unique_together 确保了每对会有唯一的记录
+            
+            # 将成员 ID 与 最后阅读消息 ID 存入字典
+            last_read_map[member.id] = status.last_read_message_id if status else None
+
+        channel_layer = get_channel_layer()
+        for member in join_request.group.members.all():
+            async_to_sync(channel_layer.group_send)(
+                member.username, 
+                {
+                    'type': 'new',
+                    'conversation_id': join_request.group.id,
+                    'member_id': join_request.invitee.id,
+                    'member_name': join_request.invitee.username,
+                    'member_avatar': join_request.invitee.avatar_base64,
+                    'last_read_map': last_read_map,
+                }
+            )
         join_request.delete()
     elif response == 'reject':
         join_request.delete()
@@ -1439,13 +1478,51 @@ def quit_group(request: HttpRequest) -> HttpResponse:
         return GROUP_NOT_FOUND
 
     if user == group.owner:
-        return OWNER_CANNOT_QUIT
+        # 获取群聊中的管理员和普通成员，按ID排序
+        admins = group.admin.all().order_by('id')
+        members = group.members.exclude(id=user.id).order_by('id')
+
+        # 尝试将群主转让给管理员，如果没有管理员则转让给普通成员
+        if admins.exists():
+            new_owner = admins.first()
+            group.owner = new_owner
+        elif members.exists():
+            new_owner = members.first()
+            group.owner = new_owner
+        else:
+            group.delete()
+            return request_success()
+        group.save()
 
     if user in group.admin.all():
         group.admin.remove(user)
 
     if user in group.members.all():
         group.members.remove(user)
+        group.history_members.add(user)
+
+        last_read_map = {}
+        for member in group.members.all():
+            # 查询每个成员在当前会话中的状态
+            status = UserConversationStatus.objects.filter(
+                user=member,
+                conversation=group
+            ).first()  # 使用 first() 是因为 unique_together 确保了每对会有唯一的记录
+            
+            # 将成员 ID 与 最后阅读消息 ID 存入字典
+            last_read_map[member.id] = status.last_read_message_id if status else None
+
+        channel_layer = get_channel_layer()
+        for member in group.members.all():
+            async_to_sync(channel_layer.group_send)(
+                member.username, 
+                {
+                    'type': 'quit',
+                    'member_id': user.id,
+                    'conversation_id': group_id,
+                    'last_read_map': last_read_map,
+                }
+            )
         return request_success()
     else:
         return NOT_IN_GROUP
@@ -1495,7 +1572,7 @@ def create_group_announcement(request: HttpRequest) -> HttpResponse:
     except (ValueError, json.JSONDecodeError):
         return INVALID_REQUEST
 
-    if not content.strip():
+    if len(content) == 0 or len(content) > MAX_ANNOUNCEMENT_LENGTH:
         return INVALID_ANNOUNCEMENT_CONTENT
 
     try:

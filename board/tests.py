@@ -424,8 +424,8 @@ class BoardTests(TestCase):
         self.assertEqual(res.json()['code'], 0)
         self.assertTrue(Friendship.objects.filter(user=CustomUser.objects.get(username=username), friend=CustomUser.objects.get(username=username2), friend_group=FriendGroup.objects.get(user=CustomUser.objects.get(username=username), name="group1")).exists())
         res = self.client.post('/user/add_friend_to_friend_group', data={"friend_id": CustomUser.objects.get(username=username2).id, "friend_group_name": ""}, content_type='application/json', **self.generate_header(username))
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.json()['code'], 0)
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json()['code'], 27)
         
     def test_add_friend_to_group_not_friend(self):
         self.client.post('/user/register', data=data_register, content_type='application/json')
@@ -462,49 +462,6 @@ class BoardTests(TestCase):
         response = self.client.get('/user/get_private_conversations', **self.generate_header("user3"))
         self.assertEqual(response.status_code, 404)
         self.assertIn("User does not exist", response.content.decode())
-
-    # def test_create_private_conversation(self):
-    #     self.user1 = CustomUser.objects.create_user(username="user1", password="password1")
-    #     self.user2 = CustomUser.objects.create_user(username="user2", password="password2")
-    #     self.user3 = CustomUser.objects.create_user(username="user3", password="password3")  # No friendship with user1
-    #     Friendship.objects.create(user=self.user1, friend=self.user2)
-    #     self.conversation = Conversation.objects.create(type='private_chat')
-    #     self.conversation.members.set([self.user1, self.user2])
-
-    #     # Test case 1: User not logged in
-    #     response = self.client.post('/user/create_private_conversation')
-    #     self.assertEqual(response.status_code, 401)
-    #     self.assertIn("User not logged in", response.content.decode())
-
-    #     # Test case 2: Invalid request body (bad JSON)
-    #     response = self.client.post('/user/create_private_conversation', data='{"friend_id": "bad id"}', content_type='application/json', **self.generate_header("user1"))
-    #     self.assertEqual(response.status_code, 400)
-    #     self.assertIn("Invalid request", response.content.decode())
-
-    #     # Test case 3: Target user does not exist
-    #     response = self.client.post('/user/create_private_conversation', data=json.dumps({'friend_id': 999}), content_type='application/json', **self.generate_header("user1"))
-    #     self.assertEqual(response.status_code, 404)
-    #     self.assertIn("Friend not found", response.content.decode())
-
-    #     # Test case 4: No existing friendship
-    #     response = self.client.post('/user/create_private_conversation', data=json.dumps({'friend_id': self.user3.id}), content_type='application/json', **self.generate_header("user1"))
-    #     self.assertEqual(response.status_code, 409)
-    #     self.assertIn("Not friends", response.content.decode())
-
-    #     # Test case 5: Conversation already exists
-    #     response = self.client.post('/user/create_private_conversation', data=json.dumps({'friend_id': self.user2.id}), content_type='application/json', **self.generate_header("user1"))
-    #     self.assertEqual(response.status_code, 200)
-    #     data = response.json()
-    #     self.assertEqual(data['conversation_id'], self.conversation.id)
-
-    #     # Test case 6: Successfully creating a new conversation
-    #     # First, remove the existing conversation to test creation of a new one
-    #     self.conversation.delete()
-    #     response = self.client.post('/user/create_private_conversation', data=json.dumps({'friend_id': self.user2.id}), content_type='application/json', **self.generate_header("user1"))
-    #     self.assertEqual(response.status_code, 200)
-    #     data = response.json()
-    #     self.assertTrue(data['conversation_id'] > 0)
-    #     self.assertEqual(data['friend_name'], 'user2')
 
     def test_conversation(self):
         self.user1 = CustomUser.objects.create_user(username="user1", password="password1")
@@ -686,44 +643,6 @@ class BoardTests(TestCase):
         # Test case 7: Invalid member ID
         response = self.client.get(f'/user/records/{self.conversation.id}?member_id=999', **self.generate_header("user1"))
         self.assertEqual(response.status_code, 404)
-
-    # def test_mark_as_read(self):
-    #     self.user1 = CustomUser.objects.create_user(username="user1", password="password1")
-    #     self.user2 = CustomUser.objects.create_user(username="user2", password="password2")
-    #     self.conversation = Conversation.objects.create(type='private_chat')
-    #     self.conversation.members.add(self.user1, self.user2)
-    #     # Create multiple messages
-    #     self.messages = [
-    #         Message.objects.create(
-    #             conversation=self.conversation,
-    #             sender=self.user1,
-    #             content=f"Message {i}"
-    #         ) for i in range(5)
-    #     ]
-
-    #     # Test case 1: User not logged in
-    #     response = self.client.post(f'/user/mark_as_read/{self.conversation.id}')
-    #     self.assertEqual(response.status_code, 401)
-
-    #     # Test case 2: Conversation does not exist
-    #     response = self.client.post('/user/mark_as_read/999', **self.generate_header("user1"))
-    #     self.assertEqual(response.status_code, 404)
-
-    #     # Test case 3: User not in conversation
-    #     user_not_in_conversation = CustomUser.objects.create_user(username="user3", password="password3")
-    #     response = self.client.post(f'/user/mark_as_read/{self.conversation.id}', **self.generate_header("user3"))
-    #     self.assertEqual(response.status_code, 403)
-
-    #     # Test case 4: Successfully mark messages as read
-    #     response = self.client.post(f'/user/mark_as_read/{self.conversation.id}', **self.generate_header("user1"))
-    #     self.assertEqual(response.status_code, 200)
-    #     for message in self.messages:
-    #         message.refresh_from_db()
-    #         self.assertTrue(self.user1 in message.read_by.all())
-
-    #     # Test UserConversationStatus updated correctly
-    #     status = UserConversationStatus.objects.get(user=self.user1, conversation=self.conversation)
-    #     self.assertIsNotNone(status.last_read_at)
 
     def test_delete_records(self):
         self.user1 = CustomUser.objects.create_user(username="user1", password="password1")
@@ -1339,10 +1258,10 @@ class BoardTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("Group not found", response.content.decode())
 
-        # Test case 4: Owner cannot quit
+        # Test case 4: Owner quitting group
         response = self.client.post('/user/quit_group', data=json.dumps({'group_id': self.group1.id}), content_type='application/json', **self.jwt_header_user1)
-        self.assertEqual(response.status_code, 403)
-        self.assertIn("Owner cannot quit", response.content.decode())
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(self.user1, self.group1.members.all())
 
         # Test case 5: Admin quitting group
         response = self.client.post('/user/quit_group', data=json.dumps({'group_id': self.group1.id}), content_type='application/json', **self.jwt_header_user2)

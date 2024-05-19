@@ -4,6 +4,7 @@ from django.contrib import admin
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('user/get_user_info/<int:id>', views.get_user_info),
     path('user/register', views.register),
     path('user/logoff', views.logoff),
     path('user/login', views.login),
@@ -19,13 +20,11 @@ urlpatterns = [
     path('user/add_friend_to_friend_group', views.add_friend_to_friend_group),
     
     path('user/get_private_conversations', views.get_private_conversations),
-    path('user/create_private_conversation', views.create_private_conversation),
     path('user/conversation/<int:conversation_id>', views.conversation),
     path('user/send_message', views.send_message),
     path('user/delete_message', views.delete_message),
     path('user/records/<int:conversation_id>', views.records),
     path('user/delete_records/<int:conversation_id>', views.delete_records),
-    path('user/mark_as_read/<int:conversation_id>', views.mark_as_read),
     path('user/reply_message', views.reply_message),
 
     path('user/create_group_conversation', views.create_group_conversation),
