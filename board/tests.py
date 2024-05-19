@@ -424,8 +424,8 @@ class BoardTests(TestCase):
         self.assertEqual(res.json()['code'], 0)
         self.assertTrue(Friendship.objects.filter(user=CustomUser.objects.get(username=username), friend=CustomUser.objects.get(username=username2), friend_group=FriendGroup.objects.get(user=CustomUser.objects.get(username=username), name="group1")).exists())
         res = self.client.post('/user/add_friend_to_friend_group', data={"friend_id": CustomUser.objects.get(username=username2).id, "friend_group_name": ""}, content_type='application/json', **self.generate_header(username))
-        self.assertEqual(res.status_code, 400)
-        self.assertEqual(res.json()['code'], 27)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['code'], 0)
         
     def test_add_friend_to_group_not_friend(self):
         self.client.post('/user/register', data=data_register, content_type='application/json')

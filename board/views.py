@@ -357,7 +357,7 @@ def respond_friend_request(req: HttpRequest):
         Friendship(user=user, friend=friend).save()
         Friendship(user=friend, friend=user).save()
         request.status = 'accept'
-
+        request.save()
         existing_conversations = Conversation.objects.filter(members__in=[user, friend], type='private_chat').prefetch_related('members').distinct()
         for conv in existing_conversations:
             if conv.members.count() == 2 and set(conv.members.all()) == {user, friend}:
@@ -444,7 +444,7 @@ def add_friend_to_friend_group(req: HttpRequest):
         return USER_NOT_LOGGED_IN
     body = json.loads(req.body.decode("utf-8"))
     friend_group_name = require(body, "friend_group_name", "string", err_msg="Missing or error type of [group_id]")
-    if len(friend_group_name) == 0 or len(friend_group_name) > MAX_FRIEND_GROUP_NAME_LENGTH:
+    if len(friend_group_name) > MAX_FRIEND_GROUP_NAME_LENGTH:
         return INVALID_FRIEND_GROUP_NAME
     friend_id = require(body, "friend_id", "int", err_msg="Missing or error type of [friend_id]")
     user = CustomUser.objects.get(username=user_name_jwt["username"])
